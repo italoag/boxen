@@ -5,7 +5,7 @@ require gcc
 Exec {
   group       => 'staff',
   logoutput   => on_failure,
-  user        => $luser,
+  user        => $boxen_user,
 
   path => [
     "${boxen::config::home}/rbenv/shims",
@@ -20,13 +20,13 @@ Exec {
 
   environment => [
     "HOMEBREW_CACHE=${homebrew::config::cachedir}",
-    "HOME=/Users/${::luser}"
+    "HOME=/Users/${::boxen_user}"
   ]
 }
 
 File {
   group => 'staff',
-  owner => $luser
+  owner => $boxen_user
 }
 
 Package {
@@ -39,7 +39,10 @@ Repository {
   extra    => [
     '--recurse-submodules'
   ],
-  require  => Class['git']
+  require  => File["${boxen::config::bindir}/boxen-git-credential"],
+  config   => {
+    'credential.helper' => "${boxen::config::bindir}/boxen-git-credential"
+  }
 }
 
 Service {
@@ -54,22 +57,30 @@ node default {
   include git
   include hub
   include nginx
-  include mongodb
 
+  # fail if FDE is not enabled
+  if $::root_encrypted == 'no' {
+    fail('Please enable full disk encryption and try again')
+  }
 
+  # node versions
+  include nodejs::v0_4
+  include nodejs::v0_6
+  include nodejs::v0_8
+  include nodejs::v0_10
+
+  # default ruby versions
+  include ruby::1_8_7
+  include ruby::1_9_2
   include ruby::1_9_3
+  include ruby::2_0_0
 
   # common, useful packages
   package {
     [
-      'ag',
-      'htop',
-      'tree',
-      'ffmpeg',
+      'ack',
       'findutils',
-      'gist',
-      'gnu-tar',
-      's3cmd'
+      'gnu-tar'
     ]:
   }
 
@@ -77,36 +88,4 @@ node default {
     ensure => link,
     target => $boxen::config::repodir
   }
-
-  # include some provided versions
-  include nodejs::v0_10
-  include nodejs::v0_8_8
-
-  # install any arbitrary nodejs version
-  nodejs { 'v0.10.1': }
-
-  class { 'nodejs::global': version => 'v0.10.0' }
-
-  # install some npm modules
-  # Yeoman tools
-  nodejs::module { 'yo': node_version => 'v0.10' }
-  nodejs::module { 'grunt-cli': node_version => 'v0.10' }
-  nodejs::module { 'bower': node_version => 'v0.10' }
-
-  include phantomjs
-
-  include memcached
 }
-
-require ruby::1_9_3_p194
-# Set the global default ruby (auto-installs it if it can)
-class { 'ruby::global':
-  version => '1.9.3'
-}
-
-ruby::gem { "bundler for ${version}":
-  gem     => 'bundler',
-  ruby    => $version,
-  version => '~> 1.2.0'
-}
-
